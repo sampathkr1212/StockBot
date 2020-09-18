@@ -1,0 +1,291 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+<div class="row">
+    <div class="col-md-12 text-center">
+        <h3>
+            <strong>Stock List</strong>
+        </h3>
+    </div>
+
+    <div class="col-md-12" style="display:inline-flex;">
+        <div class="col-md-8" id="highchart-container" style="height: 450px; width: 100%"></div>
+        <div class="col-md-4">
+            <table id="stocktable" class="table table-condensed table-striped table-borderless table-hover">
+                <thead scope="row" class="thead-dark">
+                    <th scope="col" style="text-align: center;">Stock Name</th>
+                    <!-- <th scope="col">Opening Price</th>
+                    <th scope="col">Closing Price</th> -->
+                    <th scope="col" style="text-align: center;">Current Price</th>
+                </thead>
+                <tbody>
+                    {% for stockname in stocknames%}
+                    <tr scope="row" style="text-align: center;">
+                        <td>{{stockname}}</td>
+                        <td id="{{stockname}}">0</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-md-8" id="chartContainer" style="height: 450px; width: 100%;"></div>
+    <div id="realtimechart-container" class="col-md-12"></div>
+</div>
+
+{% endblock %}
+
+{% block script %}
+<!--
+<script>
+    let local_socket = new WebSocket('ws://localhost:8000/ws/stockdata/');
+    local_socket.onopen = function (e) {
+        console.log('Connection established');
+        local_socket.send(JSON.stringify("get_data"))
+
+    };
+
+    local_socket.onmessage = function (e) {
+        console.log(e['text'])
+    };
+
+    local_socket.onclose = function (e) {
+        console.log('Connection closed');
+    };
+</script>
+-->
+<script>
+    /*
+    let stock_list = {{ stocklist | safe}}
+    console.log(stock_list)
+    let socket = new WebSocket('ws://localhost:8000/ws/stockdata/');
+    socket.onopen = function (e) {
+        console.log('Connection established');
+
+        auth_data = {
+            "action": "authenticate",
+            "data": { "key_id": "PK0FQRLC49D83ZE804WW", "secret_key": "5edRjGfh0ubqqvztzTOZbTRzu39QPqmzJb2NLQaF" }
+        }
+
+        socket.send("getData")
+        //channel_data = { "action": "subscribe", "params": stock_list }
+        //socket.send(channel_data)
+    };
+
+    socket.onmessage = function (e) {
+        console.log(e)
+        data = JSON.parse(e['data'])
+        console.log(data)
+        //console.log("received a message")
+        //$('#stocktable tbody').html('<tr><td>' + data['text']['indexName'] + '</td><td>' + data['text']['value'] + '</td><td>' + data['text']['value'] + '</td><td>' + data['text']['value'] + '</td></tr>')
+    };
+
+    socket.onclose = function (e) {
+        console.log('Connection closed');
+    };
+    */
+</script>
+
+<script>
+    let stock_list = {{ stocklist | safe}}
+    console.log(stock_list)
+    let socket = new WebSocket('wss://data.alpaca.markets/stream');
+    socket.onopen = function (e) {
+        console.log('Connection established');
+
+        auth_data = {
+            "action": "authenticate",
+            "data": {
+                "key_id": "PK0FQRLC49D83ZE804WW",
+                "secret_key": "5edRjGfh0ubqqvztzTOZbTRzu39QPqmzJb2NLQaF",
+            },
+        }
+
+        socket.send(JSON.stringify(auth_data))
+        channel_data = {
+            "action": "listen",
+            "data": { "streams": stock_list },
+        }
+        socket.send(JSON.stringify(channel_data))
+
+    };
+
+    socket.onmessage = function (e) {
+        data = JSON.parse(e['data'])
+        console.log(data)
+        var res = $('#' + data['data']['T'] + '').html().split(" ", 1)
+        if (res[0] > data['data']['p']) {
+            $('#' + data['data']['T'] + '').html('')
+            $('#' + data['data']['T'] + '').append(data['data']['p'] + " " + '<i class="fa fa-caret-down fa-lg" style="color:red;"></i>')
+        } else {
+            $('#' + data['data']['T'] + '').html('')
+            $('#' + data['data']['T'] + '').append(data['data']['p'] + " " + '<i class="fa fa-caret-up fa-lg" style="color:green;"></i>')
+        }
+
+    };
+
+    socket.onclose = function (e) {
+        console.log('Connection closed');
+    };
+
+</script>
+<script type="text/javascript"> //Canvas JS Real time line chart
+    window.onload = function () {
+        var dataPoints = [], currentDate = new Date();
+        var stockChart = new CanvasJS.StockChart("chartContainer", {
+            theme: "light2",//"dark1", //"light2", "dark1", "dark2"
+            title: {
+                text: "Dynamic StockChart"
+            },
+            charts: [{
+                axisX: {
+                    crosshair: {
+                        enabled: true,
+                        valueFormatString: "MMM DD, YYYY HH:mm:ss"
+                    }
+                },
+                axisY: {
+                    title: "Pageviews Per Second"
+                },
+                toolTip: {
+                    shared: true
+                },
+                data: [{
+                    type: "line",
+                    name: "Pageviews",
+                    xValueFormatString: "MMM DD, YYYY HH:mm:ss",
+                    xValueType: "dateTime",
+                    dataPoints: dataPoints
+                }]
+            }],
+            navigator: {
+                slider: {
+                    minimum: new Date(currentDate.getTime() - (90 * 1000))
+                },
+                axisX: {
+                    labelFontColor: "white"
+                }
+            },
+            rangeSelector: {
+                enabled: false
+            }
+        });
+
+        var dataCount = 700, ystart = 50, interval = 1000, xstart = (currentDate.getTime() - (700 * 1000));
+        updateChart(xstart, ystart, dataCount, interval);
+        function updateChart(xstart, ystart, length, interval) {
+            var xVal = xstart, yVal = ystart;
+            for (var i = 0; i < length; i++) {
+                yVal = yVal + Math.round(5 + Math.random() * (-5 - 5));
+                yVal = Math.min(Math.max(yVal, 5), 90);
+                dataPoints.push({ x: xVal, y: yVal });
+                xVal += interval;
+            }
+
+            //stockChart.options.navigator.slider.minimum = new Date(xVal - (90 * 1000));
+            xstart = xVal;
+            dataCount = 1;
+            ystart = yVal;
+            stockChart.render();
+            setTimeout(function () { updateChart(xstart, ystart, dataCount, interval); }, 1000);
+        }
+    }
+</script>
+{% endblock %}
+
+{% block endbodyscript %}
+
+<script>
+
+    Highcharts.stockChart('highchart-container', {
+        chart: {
+            events: {
+                load: function () {
+                    var series = this.series[0];
+                    socket.onmessage = function (event) {
+                        var stock_data = JSON.parse(event['data']);
+                        //sleep(5000);
+                        // Minute By Minute Data
+                        if (stock_data['data']['ev'] == 'AM') {
+                            console.log(stock_data)
+                            var dataPoint = {
+                                x: stock_data['data']['e'],
+                                y: stock_data['data']['c'],
+                            }
+                            if (series.data.length < 10) {
+                                series.addPoint(dataPoint, true, false);
+                            } else {
+                                series.addPoint(dataPoint, true, true);
+                            }
+
+                        }
+
+                        /***
+                        if (stock_data['data']['T'] == 'TSLA') {
+                            //console.log(stock_data)
+                            var dataPoint = {
+                                x: stock_data['data']['t'] / 1000000,
+                                y: stock_data['data']['p'],
+                            }
+                            if (series.data.length < 50) {
+                                series.addPoint(dataPoint, true, false);
+                            } else {
+                                series.addPoint(dataPoint, true, true);
+                            }
+
+                        }
+                        **/
+
+                        //For Price Table
+
+                        var res = $('#' + stock_data['data']['T'] + '').html().split(" ", 1)
+                        if (res[0] > stock_data['data']['p']) {
+                            $('#' + stock_data['data']['T'] + '').html('')
+                            $('#' + stock_data['data']['T'] + '').append(stock_data['data']['p'] + " " + '<i class="fa fa-caret-down fa-lg" style="color:red;"></i>')
+                        } else {
+                            $('#' + stock_data['data']['T'] + '').html('')
+                            $('#' + stock_data['data']['T'] + '').append(stock_data['data']['p'] + " " + '<i class="fa fa-caret-up fa-lg" style="color:green;"></i>')
+                        }
+                    };
+
+                }
+            }
+        },
+
+        time: {
+            useUTC: true
+        },
+        turboThreshold: 1000,
+        rangeSelector: {
+            buttons: [{
+                count: 1,
+                type: 'minute',
+                text: '1M'
+            }, {
+                count: 5,
+                type: 'minute',
+                text: '5M'
+            }, {
+                type: 'all',
+                text: 'All'
+            }],
+            inputEnabled: false,
+            selected: 0
+        },
+
+        title: {
+            text: 'Tesla Stock Live Data'
+        },
+
+        exporting: {
+            enabled: false
+        },
+
+        series: [{
+            name: 'Stock Close Price',
+            data: []
+        }]
+    });
+
+</script>
+{% endblock %}
